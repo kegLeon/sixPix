@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -39,14 +40,80 @@ var tasks = map[string]Task{
 	},
 }
 
-// Ниже напишите обработчики для каждого эндпоинта
-// ...
+type ResponseAll struct {
+	Tasks []Task `json:"tasks"`
+}
 
+func allHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
+	}
+	var responseElements []Task
+	for _, v := range tasks {
+		responseElements = append(responseElements, v)
+	}
+	response := ResponseAll{Tasks: responseElements}
+	err := json.NewEncoder(w).Encode(response)
+	if err != nil {
+		http.Error(w, "Allarm", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func HandlerInServ(w http.ResponseWriter, r *http.Request) {
+	var task Task
+	if r.Method != http.MethodPost {
+		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
+	}
+	err := json.NewDecoder(r.Body).Decode(&task)
+	if err != nil {
+		http.Error(w, "allarmInServ", http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	tasks[task.ID] = task
+}
+func HandlerId(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
+	}
+	idsh := r.URL.Query().Get("ID")
+	v, exists := tasks[idsh]
+	if exists {
+		err := json.NewEncoder(w).Encode(v)
+		if err != nil {
+			http.Error(w, "Ошибка декода", http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Error(w, "Ошибка в айlишной обработке", http.StatusBadRequest)
+
+}
+func HandlerDelID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
+	}
+	idsh := r.URL.Query().Get("ID")
+	_, exists := tasks[idsh]
+	if exists {
+		delete(tasks, idsh)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Error(w, "Ошибка в удалении", http.StatusBadRequest)
+}
 func main() {
 	r := chi.NewRouter()
 
 	// здесь регистрируйте ваши обработчики
-	// ...
+	http.HandleFunc("/tasks", allHandler)
+	http.HandleFunc("/tasks", HandlerInServ)
+	http.HandleFunc("/tasks{id}", HandlerId)
+	http.HandleFunc("/tasks{id}", HandlerDelID)
 
 	if err := http.ListenAndServe(":8080", r); err != nil {
 		fmt.Printf("Ошибка при запуске сервера: %s", err.Error())
